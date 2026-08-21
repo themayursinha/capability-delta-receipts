@@ -1,0 +1,61 @@
+{
+  "task_id": "T-CAP-DELTA-001",
+  "invariant_ids": ["CD1", "CD2", "CD3", "CD4", "CD5", "CD6"],
+  "security_sensitive": true,
+  "security_problem": "An agent can be individually authorized for every step of a research trajectory (inspect source, compile, run local PoCs) while the composition of those steps produces an effect outside the declared boundary. No nominal permissions change; the meaning of existing permissions changes because the agent acquired exploit primitives (bug A OOB R/W, bug B heap escape / native exec). Static action classification cannot see this; the dangerous object is the trajectory.",
+  "required_behavior": "Reduce a scripted trajectory (declare/file/build/runtime/request events) into provenance-carrying capability deltas over a fixed lattice using a declared+detected hybrid detector with evidence levels (declared_only < artifact < runtime_marker < boundary_request). Declared intent alone yields provisional capability, never a confirmed delta (CD-3). Only the deterministic boundary predicate decides PAUSE: in-scope accumulation (bug A, bug B, compilation, crashes, PoCs against the declared target) must ALWAYS ALLOW (CD-1); only envelope escape (host exec, network egress beyond sandbox, canary access) pauses, with a durable hash-linked JSONL PAUSE receipt emitted BEFORE the boundary effect executes (CD-2). Receipts are canonical, deterministic, hash-linked JSONL with stable field ordering and the six acceptance fields (CD-6).",
+  "failure_behavior": "Fail closed: a boundary-crossing effect never executes on the guarded path; declared intent alone never confirms a capability; a receipt never claims a capability without a citing observed signal at a matching evidence level; malformed/unknown-field/trailing-JSON trajectory input exits non-zero with no partial receipt on stdout.",
+  "allowed_paths": [
+    ".gitignore",
+    "LICENSE",
+    "README.md",
+    "go.mod",
+    "capdelta/model.go",
+    "capdelta/detector.go",
+    "capdelta/envelope.go",
+    "capdelta/receipt.go",
+    "capdelta/detector_test.go",
+    "capdelta/envelope_test.go",
+    "capdelta/receipt_test.go",
+    "cmd/capdelta/main.go",
+    "cmd/capdelta/main_test.go",
+    "testdata/allow-bug-a.json",
+    "testdata/allow-bug-a.expected.json",
+    "testdata/allow-bug-b.json",
+    "testdata/allow-bug-b.expected.json",
+    "testdata/pause-composition.json",
+    "testdata/pause-composition.expected.json",
+    "testdata/pause-egress.json",
+    "testdata/pause-egress.expected.json",
+    "testdata/allow-full-research.json",
+    "testdata/allow-full-research.expected.json",
+    "harness/project-contract.md",
+    "harness/invariants.md",
+    "harness/check.sh",
+    "harness/tasks/T-CAP-DELTA-001.json"
+  ],
+  "approval_gated_paths": [],
+  "max_attempts": 3,
+  "required_commands": [
+    {
+      "name": "red_test",
+      "expect": "fail",
+      "argv": ["go", "test", "./capdelta", "-run", "^Test(BugAAllowed|BugBAllowed|CompositionPaused)$", "-count=1"]
+    },
+    {
+      "name": "target_test",
+      "expect": "pass",
+      "argv": ["go", "test", "./capdelta", "./cmd/capdelta", "-count=1"]
+    },
+    {
+      "name": "race_test",
+      "expect": "pass",
+      "argv": ["go", "test", "-race", "./...", "-count=1"]
+    },
+    {
+      "name": "harness",
+      "expect": "pass",
+      "argv": ["harness/check.sh"]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+# Build artifacts
+/capability-delta-receipts
+/dist/
+
+# Test and harness evidence
+/evidence/
+
+# OS/IDE metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
