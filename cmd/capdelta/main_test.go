@@ -307,6 +307,51 @@ func TestRunRejectsOmittedRequiredFields(t *testing.T) {
 	}
 }
 
+// TestRunRejectsRequestEventWithoutEffect proves the strict-JSON CLI is
+// fail-closed for request events too (Codex P2, PR #1): a request event
+// that omits effect must exit non-zero with empty stdout — never emit an
+// ALLOW receipt with no signal from an incomplete request.
+func TestRunRejectsRequestEventWithoutEffect(t *testing.T) {
+	valid := validTrajectoryJSON()
+	drop := func(mutate func(map[string]any)) string {
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(valid), &obj); err != nil {
+			t.Fatalf("decode valid trajectory: %v", err)
+		}
+		mutate(obj)
+		out, err := json.Marshal(obj)
+		if err != nil {
+			t.Fatalf("encode mutated trajectory: %v", err)
+		}
+		return string(out)
+	}
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{"missing effect on request event", drop(func(o map[string]any) {
+			events := o["events"].([]any)
+			ev := events[0].(map[string]any)
+			ev["type"] = "request"
+			ev["effect_target"] = "v8-sandbox@container"
+			delete(ev, "marker")
+			delete(ev, "effect")
+		})},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeTemp(t, tc.content)
+			out, err := runArgs(t, path)
+			if err == nil {
+				t.Fatal("expected error for request event without effect")
+			}
+			if out != "" {
+				t.Fatalf("partial receipt on stdout: %q", out)
+			}
+		})
+	}
+}
+
 // TestRunRejectsOmittedEventFields proves the strict-JSON CLI is
 // fail-closed on events too (reviewer P2-1): an event missing its type,
 // step_id, or effect fields, and an events array with zero elements,

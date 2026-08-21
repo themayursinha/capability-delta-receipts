@@ -272,8 +272,9 @@ func checkEventArray(dec *json.Decoder, tok json.Token) error {
 }
 
 // checkEventObject validates one event: type, step_id, and effect_target
-// are always required; a runtime event also requires marker. Other event
-// fields stay optional so file/build/request fixtures remain valid.
+// are always required; a runtime event also requires marker, and a request
+// event also requires effect. Other event fields stay optional so
+// file/build fixtures remain valid.
 func checkEventObject(dec *json.Decoder) error {
 	seen := make(map[string]bool, len(eventObjectFields))
 	eventType := ""
@@ -317,6 +318,9 @@ func checkEventObject(dec *json.Decoder) error {
 	}
 	if eventType == capdelta.EventRuntime && !seen["marker"] {
 		return fmt.Errorf("missing required field %q", "marker")
+	}
+	if eventType == capdelta.EventRequest && !seen["effect"] {
+		return fmt.Errorf("missing required field %q", "effect")
 	}
 	return nil
 }
