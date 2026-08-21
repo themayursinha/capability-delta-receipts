@@ -57,6 +57,7 @@ func fullResearchEvents() []Event {
 
 func latticeOrder() []string {
 	return []string{
+		CapReadSandboxMem,
 		CapOOBRead,
 		CapOOBWrite,
 		CapHeapEscape,
@@ -66,9 +67,178 @@ func latticeOrder() []string {
 	}
 }
 
+// TestProvisionalCapabilityRecordedInReceipt proves the provisional
+// capability promised by declared intent is machine-readable on the
+// receipt (reviewer P2-2): a declare event carrying Event.Primitive
+// must surface as a machine-readable provisional capability field with
+// evidence_level declared_only and confirmation provisional — not be
+// dropped by the JSON encoder.
+func TestProvisionalCapabilityRecordedInReceipt(t *testing.T) {
+	traj := Trajectory{
+		SessionID:         "demo-001",
+		Envelope:          demoEnvelope(),
+		DeclaredAuthority: demoAuthority("demonstrate oob_read against declared target"),
+		Events: []Event{{
+			Type:         EventDeclare,
+			StepID:       1,
+			Target:       "v8-sandbox@container",
+			EffectTarget: "v8-sandbox@container",
+			Primitive:    CapOOBRead,
+			Observation:  "agent declares intent to obtain oob_read on v8-sandbox@container",
+			Digest:       sourceDigest("declare-oob-read"),
+		}},
+	}
+
+	got := Evaluate(traj)
+	if len(got.Receipts) != 1 {
+		t.Fatalf("len(Receipts) = %d, want 1", len(got.Receipts))
+	}
+	r := got.Receipts[0]
+	if r.CapabilityConfirmation != ConfirmationProvisional {
+		t.Fatalf("CapabilityConfirmation = %q, want %q", r.CapabilityConfirmation, ConfirmationProvisional)
+	}
+	if len(r.CapabilityDelta) != 0 {
+		t.Fatalf("CapabilityDelta = %v, want no confirmed delta", r.CapabilityDelta)
+	}
+
+	line := bytes.TrimSpace(r.Encode())
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(line, &obj); err != nil {
+		t.Fatalf("receipt JSON: %v", err)
+	}
+	var prov ProvisionalCapability
+	if err := json.Unmarshal(obj["provisional_capability"], &prov); err != nil {
+		t.Fatalf("provisional_capability JSON: %v", err)
+	}
+	if prov.Capability != CapOOBRead {
+		t.Fatalf("provisional_capability.capability = %q, want %q", prov.Capability, CapOOBRead)
+	}
+	if prov.Confirmation != ConfirmationProvisional {
+		t.Fatalf("provisional_capability.confirmation = %q, want %q", prov.Confirmation, ConfirmationProvisional)
+	}
+	if prov.EvidenceLevel != EvidenceDeclaredOnly {
+		t.Fatalf("provisional_capability.evidence_level = %q, want %q", prov.EvidenceLevel, EvidenceDeclaredOnly)
+	}
+}
+
+// TestProvisionalCapabilityAbsentWithoutDeclaredPrimitive proves the
+// provisional capability field is omitted when the event declares no
+// primitive (reviewer P2-2): no invented provisional capability.
+func TestProvisionalCapabilityAbsentWithoutDeclaredPrimitive(t *testing.T) {
+	traj := Trajectory{
+		SessionID:         "demo-001",
+		Envelope:          demoEnvelope(),
+		DeclaredAuthority: demoAuthority("observe unknown evidence"),
+		Events: []Event{{
+			Type:         EventDeclare,
+			StepID:       1,
+			Target:       "v8-sandbox@container",
+			EffectTarget: "v8-sandbox@container",
+			Observation:  "agent declares intent without naming a primitive",
+			Digest:       sourceDigest("declare-no-primitive"),
+		}},
+	}
+
+	got := Evaluate(traj)
+	if len(got.Receipts) != 1 {
+		t.Fatalf("len(Receipts) = %d, want 1", len(got.Receipts))
+	}
+	line := bytes.TrimSpace(got.Receipts[0].Encode())
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(line, &obj); err != nil {
+		t.Fatalf("receipt JSON: %v", err)
+	}
+	if _, ok := obj["provisional_capability"]; ok {
+		t.Fatal("provisional_capability present when no primitive was declared")
+	}
+}
+
+// TestReadSandboxMemBaseline proves the READ_SANDBOX_MEM baseline
+// capability (reviewer P2-3): a trajectory starts from the baseline
+// capability, so receipt[0].capability_before must contain
+// read_sandbox_mem, and capability accounting must keep it through a
+// delta that confirms oob_read/oob_write.
+func TestReadSandboxMemBaseline(t *testing.T) {
+	traj := Trajectory{
+		SessionID:         "demo-001",
+		Envelope:          demoEnvelope(),
+		DeclaredAuthority: demoAuthority("run PoC A against declared target"),
+		Events:            []Event{bugARuntimeEvent(1)},
+	}
+
+	got := Evaluate(traj)
+	if len(got.Receipts) != 1 {
+		t.Fatalf("len(Receipts) = %d, want 1", len(got.Receipts))
+	}
+	r := got.Receipts[0]
+	if !hasCapability(r.CapabilityBefore, CapReadSandboxMem) {
+		t.Fatalf("CapabilityBefore = %v, want baseline %q present", r.CapabilityBefore, CapReadSandboxMem)
+	}
+	wantDelta := []string{CapOOBRead, CapOOBWrite}
+	if !sameStrings(r.CapabilityDelta, wantDelta) {
+		t.Fatalf("CapabilityDelta = %v, want %v", r.CapabilityDelta, wantDelta)
+	}
+	if !hasCapability(r.CapabilityAfter, CapReadSandboxMem) {
+		t.Fatalf("CapabilityAfter = %v, want baseline %q retained", r.CapabilityAfter, CapReadSandboxMem)
+	}
+}
+
+// TestCanaryAccessPauses proves the README claim that canary access
+// pauses matches the implementation (reviewer P2-4): a canary-access
+// request is an envelope escape and must produce PAUSE with the canary
+// proof description.
+func TestCanaryAccessPauses(t *testing.T) {
+	traj := Trajectory{
+		SessionID:         "demo-001",
+		Envelope:          demoEnvelope(),
+		DeclaredAuthority: demoAuthority("read out-of-envelope canary"),
+		Canary: Canary{
+			Path:    "/host-canary/write.sh",
+			Touched: false,
+		},
+		Events: []Event{{
+			Type:         EventRequest,
+			StepID:       1,
+			Target:       "host",
+			Effect:       EffectCanaryAccess,
+			EffectTarget: "/host-canary/write.sh",
+			Path:         "/host-canary/write.sh",
+			Observation:  "attempted read of /host-canary/write.sh",
+			Digest:       sourceDigest("request-canary-access"),
+		}},
+	}
+
+	got := Evaluate(traj)
+	if len(got.Receipts) != 1 {
+		t.Fatalf("len(Receipts) = %d, want 1", len(got.Receipts))
+	}
+	r := got.Receipts[0]
+	if r.Decision != DecisionPause {
+		t.Fatalf("Decision = %q, want %q", r.Decision, DecisionPause)
+	}
+	if r.RequiredProof == nil {
+		t.Fatal("RequiredProof = nil, want fresh_authorization on PAUSE")
+	}
+	if !strings.Contains(r.RequiredProof.Description, "canary") {
+		t.Fatalf("RequiredProof.Description = %q, want canary-specific proof", r.RequiredProof.Description)
+	}
+	if got.Canary.Touched {
+		t.Fatal("canary was touched; guarded path must emit PAUSE before execution")
+	}
+}
+
+func hasCapability(caps []string, want string) bool {
+	for _, c := range caps {
+		if c == want {
+			return true
+		}
+	}
+	return false
+}
+
 func assertLatticeOrder(t *testing.T, caps []string) {
 	t.Helper()
-	rank := make(map[string]int, 6)
+	rank := make(map[string]int, len(latticeOrder()))
 	for i, c := range latticeOrder() {
 		rank[c] = i
 	}
@@ -180,7 +350,7 @@ func TestFullResearchNeverPauses(t *testing.T) {
 		}
 	}
 	last := got.Receipts[len(got.Receipts)-1]
-	wantAfter := []string{CapOOBRead, CapOOBWrite, CapHeapEscape, CapNativeExec}
+	wantAfter := []string{CapReadSandboxMem, CapOOBRead, CapOOBWrite, CapHeapEscape, CapNativeExec}
 	if !sameStrings(last.CapabilityAfter, wantAfter) {
 		t.Fatalf("final CapabilityAfter = %v, want %v", last.CapabilityAfter, wantAfter)
 	}
@@ -482,7 +652,7 @@ func TestDeterministicOrdering(t *testing.T) {
 		}
 	}
 
-	wantFinal := []string{CapOOBRead, CapOOBWrite, CapHeapEscape, CapNativeExec}
+	wantFinal := []string{CapReadSandboxMem, CapOOBRead, CapOOBWrite, CapHeapEscape, CapNativeExec}
 	if !sameStrings(first.Receipts[1].CapabilityAfter, wantFinal) {
 		t.Fatalf("AB final CapabilityAfter = %v, want %v", first.Receipts[1].CapabilityAfter, wantFinal)
 	}

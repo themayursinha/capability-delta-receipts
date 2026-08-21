@@ -257,6 +257,98 @@ func TestRunRejectsStrictShapeViolations(t *testing.T) {
 	}
 }
 
+// TestRunRejectsOmittedRequiredFields proves the strict-JSON CLI is
+// fail-closed on missing required fields (reviewer P2-1): a trajectory
+// that omits any required top-level or nested field, or is an empty
+// object, must exit non-zero with empty stdout — never emit a receipt
+// from a semantically incomplete input.
+func TestRunRejectsOmittedRequiredFields(t *testing.T) {
+	valid := validTrajectoryJSON()
+	drop := func(mutate func(map[string]any)) string {
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(valid), &obj); err != nil {
+			t.Fatalf("decode valid trajectory: %v", err)
+		}
+		mutate(obj)
+		out, err := json.Marshal(obj)
+		if err != nil {
+			t.Fatalf("encode mutated trajectory: %v", err)
+		}
+		return string(out)
+	}
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{"missing session_id", drop(func(o map[string]any) { delete(o, "session_id") })},
+		{"missing envelope", drop(func(o map[string]any) { delete(o, "envelope") })},
+		{"missing declared_authority", drop(func(o map[string]any) { delete(o, "declared_authority") })},
+		{"missing events", drop(func(o map[string]any) { delete(o, "events") })},
+		{"missing envelope.declared_target", drop(func(o map[string]any) { delete(o["envelope"].(map[string]any), "declared_target") })},
+		{"missing envelope.declared_network", drop(func(o map[string]any) { delete(o["envelope"].(map[string]any), "declared_network") })},
+		{"missing envelope.declared_host", drop(func(o map[string]any) { delete(o["envelope"].(map[string]any), "declared_host") })},
+		{"missing authority.target", drop(func(o map[string]any) { delete(o["declared_authority"].(map[string]any), "target") })},
+		{"missing authority.network", drop(func(o map[string]any) { delete(o["declared_authority"].(map[string]any), "network") })},
+		{"missing authority.host", drop(func(o map[string]any) { delete(o["declared_authority"].(map[string]any), "host") })},
+		{"missing authority.intent", drop(func(o map[string]any) { delete(o["declared_authority"].(map[string]any), "intent") })},
+		{"empty object", `{}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeTemp(t, tc.content)
+			out, err := runArgs(t, path)
+			if err == nil {
+				t.Fatal("expected error for omitted required field")
+			}
+			if out != "" {
+				t.Fatalf("partial receipt on stdout: %q", out)
+			}
+		})
+	}
+}
+
+// TestRunRejectsOmittedEventFields proves the strict-JSON CLI is
+// fail-closed on events too (reviewer P2-1): an event missing its type,
+// step_id, or effect fields, and an events array with zero elements,
+// must exit non-zero with empty stdout instead of emitting a receipt.
+func TestRunRejectsOmittedEventFields(t *testing.T) {
+	valid := validTrajectoryJSON()
+	drop := func(mutate func(map[string]any)) string {
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(valid), &obj); err != nil {
+			t.Fatalf("decode valid trajectory: %v", err)
+		}
+		mutate(obj)
+		out, err := json.Marshal(obj)
+		if err != nil {
+			t.Fatalf("encode mutated trajectory: %v", err)
+		}
+		return string(out)
+	}
+	cases := []struct {
+		name    string
+		content string
+	}{
+		{"missing event type", drop(func(o map[string]any) { delete(o["events"].([]any)[0].(map[string]any), "type") })},
+		{"missing event step_id", drop(func(o map[string]any) { delete(o["events"].([]any)[0].(map[string]any), "step_id") })},
+		{"missing event effect_target", drop(func(o map[string]any) { delete(o["events"].([]any)[0].(map[string]any), "effect_target") })},
+		{"missing event marker", drop(func(o map[string]any) { delete(o["events"].([]any)[0].(map[string]any), "marker") })},
+		{"empty events array", drop(func(o map[string]any) { o["events"] = []any{} })},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeTemp(t, tc.content)
+			out, err := runArgs(t, path)
+			if err == nil {
+				t.Fatal("expected error for omitted event field")
+			}
+			if out != "" {
+				t.Fatalf("partial receipt on stdout: %q", out)
+			}
+		})
+	}
+}
+
 func TestRunAllowIsAnAuthorizationResult(t *testing.T) {
 	out, err := runArgs(t, testdata("allow-bug-a.json"))
 	if err != nil {
