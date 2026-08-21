@@ -1,5 +1,11 @@
 # Capability Delta Receipts
 
+> **Part of the [MCP Visor Trust Plane](https://github.com/themayursinha/mcp-visor) research program.**
+> This prototype answers one half of the Trust Plane question — *what capability can an agent acquire* —
+> alongside [Authority Graph Simulator](https://github.com/themayursinha/authority-graph-simulator),
+> which answers the other half — *what authority can be reached*. The production enforcement lives in
+> **mcp-visor**; these repos are deterministic prototypes that prove the semantics before any integration.
+
 Deterministic, hash-linked receipts that record whether each step of an
 agent research trajectory gave the agent a materially stronger primitive
 — and pause before the first effect outside the declared envelope.
