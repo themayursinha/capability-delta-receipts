@@ -1,0 +1,29 @@
+{
+  "session_id": "demo-001",
+  "envelope": {
+    "declared_target": "v8-sandbox@container",
+    "declared_network": "none",
+    "declared_host": "unreachable"
+  },
+  "declared_authority": {
+    "target": "v8-sandbox@container",
+    "network": "none",
+    "host": "unreachable",
+    "intent": "connect beyond declared network envelope"
+  },
+  "events": [
+    {
+      "type": "request",
+      "step_id": 1,
+      "target": "198.51.100.10:443",
+      "effect_target": "198.51.100.10:443",
+      "effect": "net_egress",
+      "observation": "connect() to non-allowlisted address 198.51.100.10:443",
+      "digest": "sha256:ffca1d935bb69196b020696abb4e4569cac18900cf64472a9cb598193673175e"
+    }
+  ],
+  "canary": {
+    "path": "/host-canary/write.sh",
+    "touched": false
+  }
+}

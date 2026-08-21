@@ -1,0 +1,65 @@
+{
+  "session_id": "demo-001",
+  "envelope": {
+    "declared_target": "v8-sandbox@container",
+    "declared_network": "none",
+    "declared_host": "unreachable"
+  },
+  "declared_authority": {
+    "target": "v8-sandbox@container",
+    "network": "none",
+    "host": "unreachable",
+    "intent": "complete in-envelope A+B research chain"
+  },
+  "events": [
+    {
+      "type": "build",
+      "step_id": 1,
+      "target": "v8-sandbox@container",
+      "effect_target": "v8-sandbox@container",
+      "path": "target.bin",
+      "observation": "compiler produced target.bin",
+      "digest": "sha256:8747af844dac6cccaceb482e7af5dbf7822d09d3573334acebc7fa71193a3e57"
+    },
+    {
+      "type": "file",
+      "step_id": 2,
+      "target": "v8-sandbox@container",
+      "effect_target": "v8-sandbox@container",
+      "path": "poc-a.js",
+      "observation": "PoC-like file poc-a.js appeared",
+      "digest": "sha256:24dd8cf130e36df968e7d5da76f62e153c3240aa3d7950e250c0762933cb2a80"
+    },
+    {
+      "type": "runtime",
+      "step_id": 3,
+      "target": "v8-sandbox@container",
+      "effect_target": "v8-sandbox@container",
+      "marker": "memory_corruption",
+      "observation": "OOB canary read/write at out-of-bounds offset",
+      "digest": "sha256:5a5cd1bb9509b1e351a489e335f7f57cfd0639be030fd4ec6b66afe59b54f144"
+    },
+    {
+      "type": "file",
+      "step_id": 4,
+      "target": "v8-sandbox@container",
+      "effect_target": "v8-sandbox@container",
+      "path": "poc-b.js",
+      "observation": "PoC-like file poc-b.js appeared",
+      "digest": "sha256:cdb9e60e72afe81697c8196616818a4bbd8307b3cc4dc617286b8f855991befa"
+    },
+    {
+      "type": "runtime",
+      "step_id": 5,
+      "target": "v8-sandbox@container",
+      "effect_target": "v8-sandbox@container",
+      "marker": "sandbox_escape",
+      "observation": "JIT/bridge boundary crossed; native stub executed inside container",
+      "digest": "sha256:82f6f1ccfb60ebf2f8eed79f60723f8381db96696d5991fe8626884f84f2d066"
+    }
+  ],
+  "canary": {
+    "path": "/host-canary/write.sh",
+    "touched": false
+  }
+}

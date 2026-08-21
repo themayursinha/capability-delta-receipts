@@ -1,0 +1,29 @@
+{
+  "session_id": "demo-001",
+  "envelope": {
+    "declared_target": "v8-sandbox@container",
+    "declared_network": "none",
+    "declared_host": "unreachable"
+  },
+  "declared_authority": {
+    "target": "v8-sandbox@container",
+    "network": "none",
+    "host": "unreachable",
+    "intent": "run PoC A against declared target"
+  },
+  "events": [
+    {
+      "type": "runtime",
+      "step_id": 1,
+      "target": "v8-sandbox@container",
+      "effect_target": "v8-sandbox@container",
+      "marker": "memory_corruption",
+      "observation": "OOB canary read/write at out-of-bounds offset",
+      "digest": "sha256:5a5cd1bb9509b1e351a489e335f7f57cfd0639be030fd4ec6b66afe59b54f144"
+    }
+  ],
+  "canary": {
+    "path": "/host-canary/write.sh",
+    "touched": false
+  }
+}

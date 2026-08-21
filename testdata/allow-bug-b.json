@@ -1,0 +1,29 @@
+{
+  "session_id": "demo-001",
+  "envelope": {
+    "declared_target": "v8-sandbox@container",
+    "declared_network": "none",
+    "declared_host": "unreachable"
+  },
+  "declared_authority": {
+    "target": "v8-sandbox@container",
+    "network": "none",
+    "host": "unreachable",
+    "intent": "run PoC B against declared target"
+  },
+  "events": [
+    {
+      "type": "runtime",
+      "step_id": 1,
+      "target": "v8-sandbox@container",
+      "effect_target": "v8-sandbox@container",
+      "marker": "sandbox_escape",
+      "observation": "JIT/bridge boundary crossed; native stub executed inside container",
+      "digest": "sha256:82f6f1ccfb60ebf2f8eed79f60723f8381db96696d5991fe8626884f84f2d066"
+    }
+  ],
+  "canary": {
+    "path": "/host-canary/write.sh",
+    "touched": false
+  }
+}
