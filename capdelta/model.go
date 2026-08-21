@@ -46,19 +46,24 @@ const (
 )
 
 // Capability lattice in fixed partial-order. Arrays on receipts are always
-// emitted in this order (CD-6). HOST_EXEC and NET_EGRESS are the only
-// capabilities whose effects lie outside the envelope.
+// emitted in this order (CD-6). read_sandbox_mem is the baseline (held
+// from the start, never a delta, never a pause trigger). host_exec and
+// net_egress are lattice capabilities whose effects lie outside the
+// envelope; canary access is a boundary effect, not a lattice capability.
+// Host exec, network egress, and canary access are the effects that pause.
 const (
-	CapOOBRead    = "oob_read"
-	CapOOBWrite   = "oob_write"
-	CapHeapEscape = "heap_escape"
-	CapNativeExec = "native_exec"
-	CapHostExec   = "host_exec"
-	CapNetEgress  = "net_egress"
+	CapReadSandboxMem = "read_sandbox_mem"
+	CapOOBRead        = "oob_read"
+	CapOOBWrite       = "oob_write"
+	CapHeapEscape     = "heap_escape"
+	CapNativeExec     = "native_exec"
+	CapHostExec       = "host_exec"
+	CapNetEgress      = "net_egress"
 )
 
 // lattice is the deterministic emission order for capability arrays.
 var lattice = []string{
+	CapReadSandboxMem,
 	CapOOBRead,
 	CapOOBWrite,
 	CapHeapEscape,
@@ -156,29 +161,39 @@ type EnvelopeState struct {
 	State string `json:"state"`
 }
 
+// ProvisionalCapability is the machine-readable declared primitive when
+// declared intent has not been confirmed (D1/CD-3). Nil (field omitted)
+// when no primitive is declared.
+type ProvisionalCapability struct {
+	Capability    string `json:"capability"`
+	Confirmation  string `json:"confirmation"`
+	EvidenceLevel string `json:"evidence_level"`
+}
+
 // Receipt is one canonical hash-linked JSONL object. Field declaration
 // order is the JSON field order (CD-6).
 type Receipt struct {
-	ReceiptVersion            int               `json:"receipt_version"`
-	SessionID                 string            `json:"session_id"`
-	StepID                    int               `json:"step_id"`
-	DeclaredAuthority         DeclaredAuthority `json:"declared_authority"`
-	Signals                   []Signal          `json:"signals"`
-	CapabilityBefore          []string          `json:"capability_before"`
-	CapabilityDelta           []string          `json:"capability_delta"`
-	CapabilityAfter           []string          `json:"capability_after"`
-	ObservedCapability        string            `json:"observed_capability"`
-	NominalPermissionsChanged bool              `json:"nominal_permissions_changed"`
-	EffectiveAuthorityChanged bool              `json:"effective_authority_changed"`
-	EnvelopeBefore            EnvelopeState     `json:"envelope_before"`
-	EnvelopeAfter             EnvelopeState     `json:"envelope_after"`
-	EnvelopeTransition        string            `json:"envelope_transition"`
-	Decision                  string            `json:"decision"`
-	Reason                    string            `json:"reason"`
-	RequiredProof             *RequiredProof    `json:"required_proof"`
-	PrevHash                  string            `json:"prev_hash"`
-	Hash                      string            `json:"hash"`
-	CapabilityConfirmation    string            `json:"-"`
+	ReceiptVersion            int                    `json:"receipt_version"`
+	SessionID                 string                 `json:"session_id"`
+	StepID                    int                    `json:"step_id"`
+	DeclaredAuthority         DeclaredAuthority      `json:"declared_authority"`
+	Signals                   []Signal               `json:"signals"`
+	CapabilityBefore          []string               `json:"capability_before"`
+	CapabilityDelta           []string               `json:"capability_delta"`
+	CapabilityAfter           []string               `json:"capability_after"`
+	ObservedCapability        string                 `json:"observed_capability"`
+	NominalPermissionsChanged bool                   `json:"nominal_permissions_changed"`
+	EffectiveAuthorityChanged bool                   `json:"effective_authority_changed"`
+	EnvelopeBefore            EnvelopeState          `json:"envelope_before"`
+	EnvelopeAfter             EnvelopeState          `json:"envelope_after"`
+	EnvelopeTransition        string                 `json:"envelope_transition"`
+	Decision                  string                 `json:"decision"`
+	Reason                    string                 `json:"reason"`
+	RequiredProof             *RequiredProof         `json:"required_proof"`
+	PrevHash                  string                 `json:"prev_hash"`
+	Hash                      string                 `json:"hash"`
+	ProvisionalCapability     *ProvisionalCapability `json:"provisional_capability,omitempty"`
+	CapabilityConfirmation    string                 `json:"-"`
 }
 
 // Evaluation is the deterministic output of one trajectory.

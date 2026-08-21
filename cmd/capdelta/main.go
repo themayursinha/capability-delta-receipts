@@ -55,8 +55,9 @@ func run(args []string, stdout io.Writer) error {
 // array, scalar, or null is rejected, unknown fields are rejected, and
 // trailing JSON after the object is rejected. A token-level shape pass
 // runs first so the object is also rejected when it contains duplicate
-// keys, case-variant or unknown field names, or null for a required
-// field — cases encoding/json would otherwise accept silently.
+// keys, case-variant or unknown field names, null for a required field,
+// or omits a required field — cases encoding/json would otherwise accept
+// silently.
 func decodeTrajectory(data []byte) (capdelta.Trajectory, error) {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 || trimmed[0] != '{' {
@@ -134,6 +135,13 @@ var (
 		"path":    jsonFieldString,
 		"touched": jsonFieldBool,
 	}
+
+	// Presence of these keys is required. encoding/json treats omission as a
+	// zero value and would otherwise emit a receipt from incomplete input.
+	trajectoryRequiredFields = []string{"session_id", "envelope", "declared_authority", "events"}
+	envelopeRequiredFields   = []string{"declared_target", "declared_network", "declared_host"}
+	authorityRequiredFields  = []string{"target", "network", "host", "intent"}
+	eventRequiredFields      = []string{"type", "step_id", "effect_target"}
 )
 
 // checkTrajectoryShape token-scans one JSON object and rejects duplicate
@@ -148,7 +156,7 @@ func checkTrajectoryShape(r io.Reader) error {
 	if d, ok := tok.(json.Delim); !ok || d != '{' {
 		return errors.New("expected a single JSON object")
 	}
-	if err := checkObject(dec, trajectoryObjectFields); err != nil {
+	if err := checkObject(dec, trajectoryObjectFields, trajectoryRequiredFields); err != nil {
 		return err
 	}
 	if _, err := dec.Token(); err != io.EOF {
@@ -161,10 +169,11 @@ func checkTrajectoryShape(r io.Reader) error {
 }
 
 // checkObject validates one JSON object against the exact field set: every
-// key must be spelled exactly and appear at most once, and each value must
-// match its expected kind (null is never accepted). It consumes the object
-// including its closing delimiter.
-func checkObject(dec *json.Decoder, fields map[string]jsonFieldKind) error {
+// key must be spelled exactly and appear at most once, each value must
+// match its expected kind (null is never accepted), and every name in
+// required must be present. It consumes the object including its closing
+// delimiter.
+func checkObject(dec *json.Decoder, fields map[string]jsonFieldKind, required []string) error {
 	seen := make(map[string]bool, len(fields))
 	for dec.More() {
 		key, err := dec.Token()
@@ -184,8 +193,15 @@ func checkObject(dec *json.Decoder, fields map[string]jsonFieldKind) error {
 			return fmt.Errorf("field %q: %w", name, err)
 		}
 	}
-	_, err := dec.Token() // consume the closing '}'
-	return err
+	if _, err := dec.Token(); err != nil { // consume the closing '}'
+		return err
+	}
+	for _, name := range required {
+		if !seen[name] {
+			return fmt.Errorf("missing required field %q", name)
+		}
+	}
+	return nil
 }
 
 func checkValue(dec *json.Decoder, kind jsonFieldKind) error {
@@ -212,29 +228,31 @@ func checkValue(dec *json.Decoder, kind jsonFieldKind) error {
 		}
 		return nil
 	case jsonFieldEnvelope:
-		return checkNestedObject(dec, tok, envelopeObjectFields)
+		return checkNestedObject(dec, tok, envelopeObjectFields, envelopeRequiredFields)
 	case jsonFieldAuthority:
-		return checkNestedObject(dec, tok, authorityObjectFields)
+		return checkNestedObject(dec, tok, authorityObjectFields, authorityRequiredFields)
 	case jsonFieldCanary:
-		return checkNestedObject(dec, tok, canaryObjectFields)
+		return checkNestedObject(dec, tok, canaryObjectFields, nil)
 	case jsonFieldEventArray:
-		return checkObjectArray(dec, tok, eventObjectFields)
+		return checkEventArray(dec, tok)
 	}
 	return nil
 }
 
-func checkNestedObject(dec *json.Decoder, tok json.Token, fields map[string]jsonFieldKind) error {
+func checkNestedObject(dec *json.Decoder, tok json.Token, fields map[string]jsonFieldKind, required []string) error {
 	if d, ok := tok.(json.Delim); !ok || d != '{' {
 		return errors.New("expected an object")
 	}
-	return checkObject(dec, fields)
+	return checkObject(dec, fields, required)
 }
 
-func checkObjectArray(dec *json.Decoder, tok json.Token, fields map[string]jsonFieldKind) error {
+func checkEventArray(dec *json.Decoder, tok json.Token) error {
 	if d, ok := tok.(json.Delim); !ok || d != '[' {
 		return errors.New("expected an array of objects")
 	}
+	n := 0
 	for dec.More() {
+		n++
 		tok, err := dec.Token()
 		if err != nil {
 			return err
@@ -242,10 +260,67 @@ func checkObjectArray(dec *json.Decoder, tok json.Token, fields map[string]jsonF
 		if d, ok := tok.(json.Delim); !ok || d != '{' {
 			return errors.New("expected an array of objects")
 		}
-		if err := checkObject(dec, fields); err != nil {
+		if err := checkEventObject(dec); err != nil {
 			return err
 		}
 	}
+	if n == 0 {
+		return errors.New("events must contain at least one event")
+	}
 	_, err := dec.Token() // consume the closing ']'
 	return err
+}
+
+// checkEventObject validates one event: type, step_id, and effect_target
+// are always required; a runtime event also requires marker, and a request
+// event also requires effect. Other event fields stay optional so
+// file/build fixtures remain valid.
+func checkEventObject(dec *json.Decoder) error {
+	seen := make(map[string]bool, len(eventObjectFields))
+	eventType := ""
+	for dec.More() {
+		key, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		name := key.(string)
+		if seen[name] {
+			return fmt.Errorf("duplicate field %q", name)
+		}
+		seen[name] = true
+		kind, ok := eventObjectFields[name]
+		if !ok {
+			return fmt.Errorf("unknown field %q", name)
+		}
+		if name == "type" {
+			tok, err := dec.Token()
+			if err != nil {
+				return err
+			}
+			s, ok := tok.(string)
+			if !ok {
+				return fmt.Errorf("field %q: expected a string", name)
+			}
+			eventType = s
+			continue
+		}
+		if err := checkValue(dec, kind); err != nil {
+			return fmt.Errorf("field %q: %w", name, err)
+		}
+	}
+	if _, err := dec.Token(); err != nil { // consume the closing '}'
+		return err
+	}
+	for _, name := range eventRequiredFields {
+		if !seen[name] {
+			return fmt.Errorf("missing required field %q", name)
+		}
+	}
+	if eventType == capdelta.EventRuntime && !seen["marker"] {
+		return fmt.Errorf("missing required field %q", "marker")
+	}
+	if eventType == capdelta.EventRequest && !seen["effect"] {
+		return fmt.Errorf("missing required field %q", "effect")
+	}
+	return nil
 }

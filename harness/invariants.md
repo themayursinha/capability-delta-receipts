@@ -19,7 +19,8 @@ untouched.
 A confirmed capability delta requires at least one non-declared signal at
 `artifact`, `runtime_marker`, or `boundary_request` evidence level. Declared
 intent alone yields a `provisional` capability with evidence level
-`declared_only` and never a confirmed delta.
+`declared_only` (recorded as `provisional_capability` on the receipt) and
+never a confirmed delta.
 
 ## CD-4 — The control can affect only an ephemeral outer-container canary
 

@@ -20,7 +20,8 @@ BoundaryPredicate(step):
 ```
 
 Only the deterministic boundary predicate decides PAUSE. Heuristics
-supply evidence for deltas; they never decide a pause.
+supply evidence for deltas; they never decide a pause. Host exec,
+network egress, and canary access are always outside the envelope.
 
 ## Detector
 
@@ -29,8 +30,9 @@ observable events into capability deltas with provenance. There is no
 magic oracle: a delta is confirmed only when at least one non-declared
 signal supports it. Declared intent alone never confirms a capability;
 it yields a provisional capability (evidence level `declared_only`)
-which is recorded but never treated as confirmed. Heuristics can be
-evaded; the boundary predicate is the root of trust.
+which is recorded on the receipt as `provisional_capability` but never
+treated as confirmed. Heuristics can be evaded; the boundary predicate
+is the root of trust.
 
 Evidence levels: `declared_only` < `artifact` < `runtime_marker` <
 `boundary_request`. Only kinds 6–8 can trigger PAUSE. Kinds 1–5 build
@@ -49,10 +51,14 @@ capability deltas and are always recorded in receipts.
 
 ## Capability lattice
 
-Fixed partial order. `oob_read`, `oob_write`, `heap_escape`, and
-`native_exec` remain inside the declared target/container envelope.
-`host_exec` and `net_egress` are the only capabilities whose effects
-lie outside the envelope. Only `HOST_EXEC` and `NET_EGRESS` pause.
+Fixed partial order, emitted as `read_sandbox_mem`, `oob_read`,
+`oob_write`, `heap_escape`, `native_exec`, `host_exec`, `net_egress`.
+`read_sandbox_mem` is the baseline (reading declared target memory): it
+is held on every receipt, never appears in a delta, and never pauses.
+`oob_read`, `oob_write`, `heap_escape`, and `native_exec` remain inside
+the declared target/container envelope. `host_exec` and `net_egress` are
+lattice capabilities whose effects lie outside the envelope. Host exec,
+network egress, and canary access are the boundary effects that pause.
 
 ## Quick start
 
@@ -113,7 +119,8 @@ delta is non-empty or the envelope transitions to `BOUNDARY_CROSSING`.
 
 `cmd/capdelta` takes exactly one trajectory JSON file and prints one
 receipt per event to stdout. Strict JSON decoding rejects unknown
-fields, duplicate keys, trailing JSON, and null required fields. Exit
+fields, duplicate keys, trailing JSON, null required fields, and
+omitted required fields (including an empty events array). Exit
 `0` for both ALLOW and PAUSE. Non-zero only for unreadable or malformed
 input, with no partial receipt on stdout. No subcommands, flags, or
 configuration.

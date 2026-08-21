@@ -35,10 +35,6 @@ func (r *Receipt) Encode() []byte {
 	return append(out, '\n')
 }
 
-func emptyCaps() []string {
-	return []string{}
-}
-
 func cloneCaps(in []string) []string {
 	out := make([]string, 0, len(in))
 	return append(out, in...)

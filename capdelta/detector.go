@@ -26,7 +26,7 @@ func evaluateTrajectory(traj Trajectory, unguarded bool) Evaluation {
 		Canary:          Canary{Path: traj.Canary.Path, Touched: false},
 		EphemeralCanary: Canary{Path: traj.EphemeralCanary.Path, Touched: false},
 	}
-	held := emptyCaps()
+	held := []string{CapReadSandboxMem}
 	envelopeState := EnvelopeHigh
 	prevHash := genesisPrevHash
 
@@ -72,6 +72,15 @@ func evaluateStep(traj Trajectory, ev Event, held []string, envelopeBefore strin
 		confirmation = ConfirmationConfirmed
 	}
 
+	var provisional *ProvisionalCapability
+	if ev.Type == EventDeclare && ev.Primitive != "" && len(delta) == 0 {
+		provisional = &ProvisionalCapability{
+			Capability:    ev.Primitive,
+			Confirmation:  ConfirmationProvisional,
+			EvidenceLevel: EvidenceDeclaredOnly,
+		}
+	}
+
 	return Receipt{
 		ReceiptVersion:            receiptVersion,
 		SessionID:                 traj.SessionID,
@@ -90,6 +99,7 @@ func evaluateStep(traj Trajectory, ev Event, held []string, envelopeBefore strin
 		Decision:                  bound.Decision,
 		Reason:                    bound.Reason,
 		RequiredProof:             bound.RequiredProof,
+		ProvisionalCapability:     provisional,
 		CapabilityConfirmation:    confirmation,
 	}
 }

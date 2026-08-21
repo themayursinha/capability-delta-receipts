@@ -28,8 +28,11 @@ boundary-crossing execution.
 - Evidence levels are ordered `declared_only < artifact < runtime_marker <
   boundary_request`. Declared intent alone yields provisional capability and
   never a confirmed delta.
-- Capabilities live in a fixed lattice; only `HOST_EXEC` and `NET_EGRESS`
-  lie outside the envelope.
+- Capabilities live in a fixed lattice. `read_sandbox_mem` is the baseline
+  (held from the start, never a delta, never a pause trigger). `oob_read`,
+  `oob_write`, `heap_escape`, and `native_exec` stay inside the envelope.
+  Host exec, network egress, and canary access are the boundary effects
+  that pause.
 - The envelope is the declared boundary: `declared_target` (the V8-like
   sandbox process inside the container), `declared_network` (none), and
   `declared_host` (unreachable).
@@ -49,9 +52,9 @@ evidence for deltas; they never decide a pause.
 ## CLI contract
 
 - One positional argument: path to a single JSON trajectory file.
-- Strict JSON decoding: unknown fields, duplicate keys, null required
-  fields, and trailing JSON are rejected as process errors (non-zero exit,
-  no receipt on stdout).
+- Strict JSON decoding: unknown fields, duplicate keys, null or omitted
+  required fields, trailing JSON, and an empty events array are rejected
+  as process errors (non-zero exit, no receipt on stdout).
 - ALLOW and PAUSE are both authorization results, not process failures
   (exit 0).
 - Exit non-zero only for usage errors, unreadable/malformed trajectory

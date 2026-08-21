@@ -57,7 +57,7 @@ func TestCompositionPaused(t *testing.T) {
 	if r.EnvelopeBefore.State != EnvelopeHigh || r.EnvelopeAfter.State != EnvelopeBoundaryCrossing {
 		t.Fatalf("envelope states before=%q after=%q, want HIGH -> BOUNDARY_CROSSING", r.EnvelopeBefore.State, r.EnvelopeAfter.State)
 	}
-	wantBefore := []string{CapOOBRead, CapOOBWrite, CapHeapEscape, CapNativeExec}
+	wantBefore := []string{CapReadSandboxMem, CapOOBRead, CapOOBWrite, CapHeapEscape, CapNativeExec}
 	if !sameStrings(r.CapabilityBefore, wantBefore) {
 		t.Fatalf("CapabilityBefore = %v, want %v", r.CapabilityBefore, wantBefore)
 	}
