@@ -1,10 +1,15 @@
 # Capability Delta Receipts
 
 > **Part of the [MCP Visor Trust Plane](https://github.com/themayursinha/mcp-visor) research program.**
-> This prototype answers one half of the Trust Plane question — *what capability can an agent acquire* —
-> alongside [Authority Graph Simulator](https://github.com/themayursinha/authority-graph-simulator),
-> which answers the other half — *what authority can be reached*. The production enforcement lives in
-> **mcp-visor**; these repos are deterministic prototypes that prove the semantics before any integration.
+
+| Repo | Question it answers | Status |
+|---|---|---|
+| [**mcp-visor**](https://github.com/themayursinha/mcp-visor) | What may an agent *do*? (runtime policy at the MCP `tools/call` boundary) | Production |
+| [**agent-identity-plane**](https://github.com/themayursinha/agent-identity-plane) | *Who* is acting, for whom, through which chain? (identity + provenance) | v0.1.0 |
+| [**authority-graph-simulator**](https://github.com/themayursinha/authority-graph-simulator) | What authority can an agent *reach*? (counterfactual delegation analysis) | Prototype |
+| [**capability-delta-receipts**](https://github.com/themayursinha/capability-delta-receipts) | What capability can an agent *acquire*? (trajectory-level capability accounting) | **This repo** |
+
+mcp-visor is the production action boundary. Agent Identity Plane authenticates callers. This CLI is a standalone trajectory proof, not an MCP proxy. mcp-visor ships an opt-in evaluator (`-capability-eval` / `settings.capability_accounting`) aligned with these semantics.
 
 Deterministic, hash-linked receipts that record whether each step of an
 agent research trajectory gave the agent a materially stronger primitive
@@ -133,12 +138,13 @@ configuration.
 
 ## Boundary
 
-This is not production capability detection. It is not integrated into
-mcp-visor or any MCP proxy. Demo bugs are simulated; there are no real
-exploits, no real host escape, and no real network egress. The detector
-is heuristic and can be evaded. The deterministic envelope predicate is
-the root of trust. Optional container theater is a simulation and is
-not required by the gate.
+This is not production capability detection. The CLI is not an MCP proxy.
+mcp-visor contains an opt-in evaluator aligned with these receipts; this
+repository remains the standalone proof and golden fixtures. Demo bugs are
+simulated; there are no real exploits, no real host escape, and no real
+network egress. The detector is heuristic and can be evaded. The
+deterministic envelope predicate is the root of trust. Optional container
+theater is a simulation and is not required by the gate.
 
 ## Roadmap (not implemented)
 
