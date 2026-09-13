@@ -12,6 +12,42 @@ const hashPrefix = "sha256:"
 // the empty payload. Every line carries a non-empty prev_hash (CD-6).
 const genesisPrevHash = hashPrefix + "e3b0c44298fc1c149afbf4c8996fb92427ae41e490166ae4ba7b5b37bcd8deac"
 
+// jsonNullString marshals a JSON string or null. A nil *jsonNullString is
+// omitted (v1 linear receipts stay byte-identical); a non-nil value with
+// a nil pointer marshals as null (executed-path v2 receipts).
+type jsonNullString struct {
+	ptr *string
+}
+
+func executedPathBranchID() *jsonNullString {
+	return &jsonNullString{}
+}
+
+func prunedBranchID(id string) *jsonNullString {
+	s := id
+	return &jsonNullString{ptr: &s}
+}
+
+func (j jsonNullString) MarshalJSON() ([]byte, error) {
+	if j.ptr == nil {
+		return []byte("null"), nil
+	}
+	return json.Marshal(*j.ptr)
+}
+
+func (j *jsonNullString) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		j.ptr = nil
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	j.ptr = &s
+	return nil
+}
+
 // Encode returns one compact JSONL line for r.
 //
 // Hashing mirrors the mcp-visor audit logger (CD-6): PrevHash is taken

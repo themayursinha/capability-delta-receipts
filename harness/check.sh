@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Capability Delta Receipts harness gate.
 #
-# Runs format check, vet, unit/CLI tests, race tests, and all five golden
-# fixture comparisons, then writes a gitignored evidence manifest under
+# Runs format check, vet, unit/CLI tests, race tests, the four tree-search
+# tests, all five golden fixture comparisons, and the CD-7 budget-violation
+# reject fixture, then writes a gitignored evidence manifest under
 # evidence/harness/<UTC timestamp>/manifest.md.
 set -uo pipefail
 
@@ -48,6 +49,8 @@ record "fixture allow-bug-b" bash -c 'go run ./cmd/capdelta testdata/allow-bug-b
 record "fixture pause-composition" bash -c 'go run ./cmd/capdelta testdata/pause-composition.json > /tmp/cap-pc.json && diff -u testdata/pause-composition.expected.json /tmp/cap-pc.json'
 record "fixture pause-egress" bash -c 'go run ./cmd/capdelta testdata/pause-egress.json > /tmp/cap-pe.json && diff -u testdata/pause-egress.expected.json /tmp/cap-pe.json'
 record "fixture allow-full-research" bash -c 'go run ./cmd/capdelta testdata/allow-full-research.json > /tmp/cap-fr.json && diff -u testdata/allow-full-research.expected.json /tmp/cap-fr.json'
+record "go test ./capdelta -run TestTreeSearch -count=1" go test ./capdelta -run TestTreeSearch -count=1
+record "fixture tree-search-budget-violation" bash -c 'set +e; go run ./cmd/capdelta testdata/tree-search-budget-violation.json > /tmp/cap-tsv.json; status=$?; set -e; test "$status" -ne 0 && test ! -s /tmp/cap-tsv.json'
 
 echo >> "${MANIFEST}"
 if [ "${FAILURES}" -eq 0 ]; then

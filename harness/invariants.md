@@ -38,3 +38,14 @@ Each step emits one JSON object per line with deterministic field ordering.
 `prev_hash` links to the previous line's `hash`; `hash` is the SHA-256 over
 the canonical JSON of the current line. Identical trajectories in different
 input orders produce byte-identical encoded receipts.
+
+## CD-7 — Search-budget ceilings are hard malformed-input rejects
+
+A tree-search trajectory (`SearchTrajectory`) declares `budget.max_depth`,
+`budget.max_branching`, and `budget.max_nodes`. Cumulative explored nodes
+(executed path plus every pruned-branch event) must never exceed
+`max_nodes`; depth must never exceed `max_depth`; branching at any node
+must never exceed `max_branching`. A trajectory that violates any ceiling
+is rejected as malformed input (non-zero exit, no receipt on stdout).
+Pruned branches are attested only: they never PAUSE. Linear `Trajectory`
+inputs are unchanged.

@@ -31,7 +31,7 @@ func evaluateTrajectory(traj Trajectory, unguarded bool) Evaluation {
 	prevHash := genesisPrevHash
 
 	for _, ev := range traj.Events {
-		r := evaluateStep(traj, ev, held, envelopeState)
+		r := evaluateEvent(traj, ev, held, envelopeState, false)
 		r.PrevHash = prevHash
 		_ = r.Encode()
 		eval.Receipts = append(eval.Receipts, r)
@@ -54,11 +54,21 @@ func reachesEphemeralCanary(ev Event) bool {
 	return false
 }
 
-func evaluateStep(traj Trajectory, ev Event, held []string, envelopeBefore string) Receipt {
+func evaluateEvent(traj Trajectory, ev Event, held []string, envelopeBefore string, attestOnly bool) Receipt {
 	signals := extractSignals(ev)
 	inEnv := effectInEnvelope(traj.Envelope, ev)
 	delta := confirmedDelta(ev, signals, inEnv, held)
-	bound := applyBoundaryPredicate(traj.Envelope, ev, envelopeBefore)
+	var bound boundaryResult
+	if attestOnly {
+		// Pruned branches were not executed (CD-1/CD-2): record deltas
+		// for attestation only; never PAUSE and never cross the envelope.
+		bound = boundaryResult{
+			Decision: DecisionAllow,
+			After:    envelopeBefore,
+		}
+	} else {
+		bound = applyBoundaryPredicate(traj.Envelope, ev, envelopeBefore)
+	}
 
 	before := cloneCaps(held)
 	after := unionLattice(before, delta)

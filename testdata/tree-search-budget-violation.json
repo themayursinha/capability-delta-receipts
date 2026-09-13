@@ -1,0 +1,62 @@
+{
+  "session_id": "demo-001",
+  "envelope": {
+    "declared_target": "v8-sandbox@container",
+    "declared_network": "none",
+    "declared_host": "unreachable"
+  },
+  "declared_authority": {
+    "target": "v8-sandbox@container",
+    "network": "none",
+    "host": "unreachable",
+    "intent": "explore a tree that exceeds the search depth ceiling"
+  },
+  "budget": {
+    "max_depth": 2,
+    "max_branching": 3,
+    "max_nodes": 8
+  },
+  "events": [
+    {
+      "type": "runtime",
+      "step_id": 1,
+      "target": "v8-sandbox@container",
+      "effect_target": "v8-sandbox@container",
+      "marker": "memory_corruption",
+      "observation": "OOB canary read/write at out-of-bounds offset",
+      "digest": "sha256:5a5cd1bb9509b1e351a489e335f7f57cfd0639be030fd4ec6b66afe59b54f144"
+    },
+    {
+      "type": "runtime",
+      "step_id": 2,
+      "target": "v8-sandbox@container",
+      "effect_target": "v8-sandbox@container",
+      "marker": "sandbox_escape",
+      "observation": "JIT/bridge boundary crossed; native stub executed inside container",
+      "digest": "sha256:82f6f1ccfb60ebf2f8eed79f60723f8381db96696d5991fe8626884f84f2d066"
+    }
+  ],
+  "branches": [
+    {
+      "branch_id": "over-depth",
+      "parent_step_id": 2,
+      "reason_pruned": "depth_ceiling",
+      "events": [
+        {
+          "type": "request",
+          "step_id": 3,
+          "target": "host",
+          "effect_target": "/host-canary/write.sh",
+          "path": "/host-canary/write.sh",
+          "effect": "host_exec",
+          "observation": "requested exec of /host-canary/write.sh",
+          "digest": "sha256:ad523599490c8f1f88b64cb835cd062db6d17eb71569ebf896ba0c2cf291636b"
+        }
+      ]
+    }
+  ],
+  "canary": {
+    "path": "/host-canary/write.sh",
+    "touched": false
+  }
+}

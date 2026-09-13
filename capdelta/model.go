@@ -94,7 +94,10 @@ const (
 // Heuristics never decide a pause (CD-1/CD-2).
 const ReasonEffectOutsideEnvelope = "effect_outside_declared_envelope"
 
-const receiptVersion = 1
+const (
+	receiptVersion     = 1
+	receiptVersionTree = 2
+)
 
 // Envelope is the declared target/network/host boundary.
 type Envelope struct {
@@ -139,6 +142,35 @@ type Trajectory struct {
 	Envelope          Envelope          `json:"envelope"`
 	DeclaredAuthority DeclaredAuthority `json:"declared_authority"`
 	Events            []Event           `json:"events"`
+	Canary            Canary            `json:"canary"`
+	EphemeralCanary   Canary            `json:"ephemeral_canary"`
+}
+
+// SearchBudget is the hard CD-7 ceiling snapshot. Depth, branching, and
+// total explored nodes are fail-closed limits, not heuristics.
+type SearchBudget struct {
+	MaxDepth     int `json:"max_depth"`
+	MaxBranching int `json:"max_branching"`
+	MaxNodes     int `json:"max_nodes"`
+}
+
+// Branch is one explored-but-pruned side path of a SearchTrajectory.
+type Branch struct {
+	BranchID     string  `json:"branch_id"`
+	ParentStepID int     `json:"parent_step_id"`
+	ReasonPruned string  `json:"reason_pruned"`
+	Events       []Event `json:"events"`
+}
+
+// SearchTrajectory is the tree-search input to EvaluateSearch. Existing
+// linear Trajectory values stay valid and unchanged.
+type SearchTrajectory struct {
+	SessionID         string            `json:"session_id"`
+	Envelope          Envelope          `json:"envelope"`
+	DeclaredAuthority DeclaredAuthority `json:"declared_authority"`
+	Budget            SearchBudget      `json:"budget"`
+	Events            []Event           `json:"events"`
+	Branches          []Branch          `json:"branches"`
 	Canary            Canary            `json:"canary"`
 	EphemeralCanary   Canary            `json:"ephemeral_canary"`
 }
@@ -192,6 +224,9 @@ type Receipt struct {
 	RequiredProof             *RequiredProof         `json:"required_proof"`
 	PrevHash                  string                 `json:"prev_hash"`
 	Hash                      string                 `json:"hash"`
+	BranchID                  *jsonNullString        `json:"branch_id,omitempty"`
+	NodeCount                 int                    `json:"node_count,omitempty"`
+	SearchBudget              *SearchBudget          `json:"search_budget,omitempty"`
 	ProvisionalCapability     *ProvisionalCapability `json:"provisional_capability,omitempty"`
 	CapabilityConfirmation    string                 `json:"-"`
 }
