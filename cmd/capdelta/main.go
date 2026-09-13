@@ -32,11 +32,25 @@ func run(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if isSearchTrajectory(data) {
+		traj, err := decodeSearchTrajectory(data)
+		if err != nil {
+			return err
+		}
+		eval, err := capdelta.EvaluateSearch(traj)
+		if err != nil {
+			return err
+		}
+		return writeReceipts(eval, stdout)
+	}
 	traj, err := decodeTrajectory(data)
 	if err != nil {
 		return err
 	}
-	eval := capdelta.Evaluate(traj)
+	return writeReceipts(capdelta.Evaluate(traj), stdout)
+}
+
+func writeReceipts(eval capdelta.Evaluation, stdout io.Writer) error {
 	var buf bytes.Buffer
 	for i := range eval.Receipts {
 		line := eval.Receipts[i].Encode()
@@ -47,7 +61,7 @@ func run(args []string, stdout io.Writer) error {
 			return err
 		}
 	}
-	_, err = stdout.Write(buf.Bytes())
+	_, err := stdout.Write(buf.Bytes())
 	return err
 }
 
@@ -82,23 +96,62 @@ func decodeTrajectory(data []byte) (capdelta.Trajectory, error) {
 	return traj, nil
 }
 
+func isSearchTrajectory(data []byte) bool {
+	var peek struct {
+		Budget   json.RawMessage `json:"budget"`
+		Branches json.RawMessage `json:"branches"`
+	}
+	if err := json.Unmarshal(data, &peek); err != nil {
+		return false
+	}
+	return len(peek.Budget) > 0 || len(peek.Branches) > 0
+}
+
+func decodeSearchTrajectory(data []byte) (capdelta.SearchTrajectory, error) {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return capdelta.SearchTrajectory{}, errors.New("invalid trajectory JSON: expected a single JSON object")
+	}
+	if err := checkTrajectoryShape(bytes.NewReader(data)); err != nil {
+		return capdelta.SearchTrajectory{}, fmt.Errorf("invalid trajectory JSON: %w", err)
+	}
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	var traj capdelta.SearchTrajectory
+	if err := dec.Decode(&traj); err != nil {
+		return capdelta.SearchTrajectory{}, fmt.Errorf("invalid trajectory JSON: %w", err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return capdelta.SearchTrajectory{}, errors.New("invalid trajectory JSON: trailing data after object")
+		}
+		return capdelta.SearchTrajectory{}, fmt.Errorf("invalid trajectory JSON: %w", err)
+	}
+	return traj, nil
+}
+
 // jsonFieldKind describes the strict shape expected for one trajectory field.
 type jsonFieldKind int
 
 const (
-	jsonFieldString     jsonFieldKind = iota // scalar string
-	jsonFieldInt                             // JSON number bound to int
-	jsonFieldBool                            // true or false
-	jsonFieldEnvelope                        // envelope object
-	jsonFieldAuthority                       // declared_authority object
-	jsonFieldCanary                          // canary / ephemeral_canary object
-	jsonFieldEventArray                      // array of event objects
+	jsonFieldString      jsonFieldKind = iota // scalar string
+	jsonFieldInt                              // JSON number bound to int
+	jsonFieldBool                             // true or false
+	jsonFieldEnvelope                         // envelope object
+	jsonFieldAuthority                        // declared_authority object
+	jsonFieldCanary                           // canary / ephemeral_canary object
+	jsonFieldEventArray                       // array of event objects
+	jsonFieldBudget                           // search-budget object
+	jsonFieldBranchArray                      // array of branch objects
 )
 
 // The trajectory schema is small and fixed, so the shape pass walks it
 // explicitly. Null is never meaningful in a trajectory; object keys must
 // be spelled exactly and may not repeat. These tables must stay in sync
-// with capdelta.Trajectory and its nested input types.
+// with capdelta.Trajectory / capdelta.SearchTrajectory and nested types.
+// budget and branches are optional together: linear inputs omit both;
+// search inputs must include both.
 var (
 	trajectoryObjectFields = map[string]jsonFieldKind{
 		"session_id":         jsonFieldString,
@@ -107,6 +160,8 @@ var (
 		"events":             jsonFieldEventArray,
 		"canary":             jsonFieldCanary,
 		"ephemeral_canary":   jsonFieldCanary,
+		"budget":             jsonFieldBudget,
+		"branches":           jsonFieldBranchArray,
 	}
 	envelopeObjectFields = map[string]jsonFieldKind{
 		"declared_target":  jsonFieldString,
@@ -135,6 +190,17 @@ var (
 		"path":    jsonFieldString,
 		"touched": jsonFieldBool,
 	}
+	budgetObjectFields = map[string]jsonFieldKind{
+		"max_depth":     jsonFieldInt,
+		"max_branching": jsonFieldInt,
+		"max_nodes":     jsonFieldInt,
+	}
+	branchObjectFields = map[string]jsonFieldKind{
+		"branch_id":      jsonFieldString,
+		"parent_step_id": jsonFieldInt,
+		"reason_pruned":  jsonFieldString,
+		"events":         jsonFieldEventArray,
+	}
 
 	// Presence of these keys is required. encoding/json treats omission as a
 	// zero value and would otherwise emit a receipt from incomplete input.
@@ -142,6 +208,8 @@ var (
 	envelopeRequiredFields   = []string{"declared_target", "declared_network", "declared_host"}
 	authorityRequiredFields  = []string{"target", "network", "host", "intent"}
 	eventRequiredFields      = []string{"type", "step_id", "effect_target"}
+	budgetRequiredFields     = []string{"max_depth", "max_branching", "max_nodes"}
+	branchRequiredFields     = []string{"branch_id", "parent_step_id", "reason_pruned", "events"}
 )
 
 // checkTrajectoryShape token-scans one JSON object and rejects duplicate
@@ -201,6 +269,11 @@ func checkObject(dec *json.Decoder, fields map[string]jsonFieldKind, required []
 			return fmt.Errorf("missing required field %q", name)
 		}
 	}
+	if _, hasSearch := fields["budget"]; hasSearch {
+		if seen["budget"] != seen["branches"] {
+			return errors.New("budget and branches must both be present for a search trajectory")
+		}
+	}
 	return nil
 }
 
@@ -235,6 +308,10 @@ func checkValue(dec *json.Decoder, kind jsonFieldKind) error {
 		return checkNestedObject(dec, tok, canaryObjectFields, nil)
 	case jsonFieldEventArray:
 		return checkEventArray(dec, tok)
+	case jsonFieldBudget:
+		return checkNestedObject(dec, tok, budgetObjectFields, budgetRequiredFields)
+	case jsonFieldBranchArray:
+		return checkBranchArray(dec, tok)
 	}
 	return nil
 }
@@ -266,6 +343,26 @@ func checkEventArray(dec *json.Decoder, tok json.Token) error {
 	}
 	if n == 0 {
 		return errors.New("events must contain at least one event")
+	}
+	_, err := dec.Token() // consume the closing ']'
+	return err
+}
+
+func checkBranchArray(dec *json.Decoder, tok json.Token) error {
+	if d, ok := tok.(json.Delim); !ok || d != '[' {
+		return errors.New("expected an array of objects")
+	}
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		if d, ok := tok.(json.Delim); !ok || d != '{' {
+			return errors.New("expected an array of objects")
+		}
+		if err := checkObject(dec, branchObjectFields, branchRequiredFields); err != nil {
+			return err
+		}
 	}
 	_, err := dec.Token() // consume the closing ']'
 	return err

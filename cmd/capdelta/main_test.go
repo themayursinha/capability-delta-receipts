@@ -428,6 +428,16 @@ func TestRunPauseIsAnAuthorizationResult(t *testing.T) {
 	}
 }
 
+func TestRunRejectsTreeSearchBudgetViolation(t *testing.T) {
+	out, err := runArgs(t, testdata("tree-search-budget-violation.json"))
+	if err == nil {
+		t.Fatal("expected error for tree-search budget violation")
+	}
+	if out != "" {
+		t.Fatalf("partial receipt on stdout: %q", out)
+	}
+}
+
 func TestRunGoldenFixtures(t *testing.T) {
 	fixtures := []string{
 		"allow-bug-a",
